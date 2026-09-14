@@ -1,0 +1,19 @@
+# ESP-IDF build output
+build/
+managed_components/
+sdkconfig.old
+
+# Editor / tooling
+.vscode/
+.clangd
+.cache/
+.claude/
+.DS_Store
+
+# KiCad local files
+*-backups/
+*.kicad_prl
+*.lck
+fp-info-cache
+_autosave-*
+.DS_Store

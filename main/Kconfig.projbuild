@@ -1,0 +1,100 @@
+menu "P1 Dongle Configuration"
+
+    config P1_UART_NUM
+        int "UART peripheral number for the P1 port"
+        default 1
+        range 0 2
+        help
+            Hardware UART used to read the P1 telegram. UART0 is normally the
+            console, so use UART1 (default) on the Universal P1 Dongle.
+
+    config P1_UART_RX_GPIO
+        int "P1 UART RX GPIO"
+        default 1
+        help
+            GPIO connected to the P1 data line (via the on-board inverting
+            transistor). On the Leotro Universal P1 Dongle this is GPIO1.
+
+    config P1_REQUEST_GPIO
+        int "P1 data-request GPIO"
+        default 2
+        help
+            GPIO that drives the smart meter's data-request line (through the
+            opto-isolator). On the Leotro Universal P1 Dongle this is GPIO2.
+
+    config P1_UART_BAUD_RATE
+        int "P1 UART baud rate"
+        default 115200
+        help
+            115200 for DSMR 4.x/5.x meters (NL/BE), 9600 for older DSMR 2.2/3.
+
+    config P1_REQUEST_ACTIVE
+        bool "Hold the data-request line active"
+        default y
+        help
+            When enabled the request line is driven high so a DSMR 4/5 meter
+            streams a telegram roughly every second.
+
+    config P1_INVERT_RX
+        bool "Invert the P1 RX signal in software"
+        default n
+        help
+            Enable when the P1 data line reaches the RX GPIO WITHOUT an on-board
+            inverting transistor/opto (i.e. the raw, inverted open-collector P1
+            signal is wired more or less directly, as on a repurposed board). The
+            Leotro dongle inverts in hardware, so leave this OFF for it. Symptom of
+            needing it: raw RX shows garbage bytes instead of '/'-prefixed ASCII.
+
+    config P1_VERIFY_CRC
+        bool "Verify telegram CRC16"
+        default y
+        help
+            Validate the CRC16 that DSMR 4/5 meters append to each telegram and
+            drop corrupted frames. Disable for DSMR 2.2/3 meters without a CRC.
+
+    config P1_PASSTHROUGH
+        bool "Enable P1 passthrough to the second port"
+        default y
+        help
+            Relay each telegram received from the meter out of the dongle's
+            second P1 port (P1TX), so a downstream device (e.g. a HomeWizard P1
+            meter) connected there reads the same data. Matter monitoring and
+            passthrough run from the same meter read.
+
+    config P1_TX_GPIO
+        int "Passthrough TX GPIO (data out to downstream device)"
+        default 42
+        depends on P1_PASSTHROUGH
+        help
+            GPIO driving the second P1 port's data line (via the on-board
+            transistor). On the Leotro Universal P1 Dongle this is GPIO42.
+
+    config P1_PASSTHROUGH_HONOR_REQUEST
+        bool "Only relay while the downstream device requests data"
+        default n
+        depends on P1_PASSTHROUGH
+        help
+            When enabled, telegrams are forwarded only while the downstream
+            device asserts its data-request line. Leave disabled to stream
+            continuously (works with HomeWizard and most readers).
+
+    config P1_TXREQ_GPIO
+        int "Downstream data-request input GPIO (TXREQ)"
+        default 41
+        depends on P1_PASSTHROUGH_HONOR_REQUEST
+        help
+            GPIO that senses the downstream device's data-request line. On the
+            Leotro Universal P1 Dongle this is GPIO41.
+
+endmenu
+
+menu "Example Configuration"
+
+    config ENABLE_MEMORY_PROFILING
+        bool "Enable Memory Profiling"
+        default n
+        help
+            Enable this option to include memory profiling features in the example.
+            This will allow you to monitor memory usage during runtime.
+
+endmenu

@@ -1,0 +1,105 @@
+CONFIG_IDF_TARGET="esp32c6"
+
+# ---- Matter-over-Thread on ESP32-C6 (auto-loaded for the esp32c6 target) ----
+
+# libsodium
+CONFIG_LIBSODIUM_USE_MBEDTLS_SHA=y
+
+# NIMBLE (BLE used only for commissioning)
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_EXT_ADV=n
+CONFIG_BT_NIMBLE_HCI_EVT_BUF_SIZE=70
+CONFIG_USE_BLE_ONLY_FOR_COMMISSIONING=n
+
+# Enable OpenThread
+CONFIG_OPENTHREAD_ENABLED=y
+CONFIG_OPENTHREAD_SRP_CLIENT=y
+CONFIG_OPENTHREAD_DNS_CLIENT=y
+CONFIG_OPENTHREAD_LOG_LEVEL_DYNAMIC=n
+CONFIG_OPENTHREAD_LOG_LEVEL_NOTE=y
+CONFIG_OPENTHREAD_CLI=n
+
+# Disable lwip ipv6 autoconfig
+CONFIG_LWIP_IPV6_AUTOCONFIG=n
+
+# Custom partition table
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# LwIP config for OpenThread
+CONFIG_LWIP_IPV6_NUM_ADDRESSES=8
+CONFIG_LWIP_MULTICAST_PING=y
+
+# mDNS
+CONFIG_USE_MINIMAL_MDNS=n
+CONFIG_ENABLE_EXTENDED_DISCOVERY=y
+
+# OTA Requestor
+CONFIG_ENABLE_OTA_REQUESTOR=y
+
+# Thread-only: no Wi-Fi station
+CONFIG_ENABLE_WIFI_STATION=n
+
+# Button + LED (board: Boot button on GPIO9)
+CONFIG_BUTTON_PERIOD_TIME_MS=20
+CONFIG_BUTTON_LONG_PRESS_TIME_MS=5000
+CONFIG_BSP_BUTTONS_NUM=1
+CONFIG_BSP_BUTTON_1_TYPE_GPIO=y
+CONFIG_BSP_BUTTON_1_GPIO=9
+CONFIG_BSP_BUTTON_1_LEVEL=0
+CONFIG_BSP_LEDS_NUM=1
+CONFIG_BSP_LED_TYPE_RGB=y
+CONFIG_BSP_LED_RGB_GPIO=8
+CONFIG_BSP_LED_RGB_BACKEND_RMT=y
+
+# Enable chip shell (console over UART0 / TX0-RX0)
+CONFIG_ENABLE_CHIP_SHELL=y
+
+# Quiet the per-message Matter tracing (chip[EM] <<< / >>>) so app + P1 logs are
+# readable. Progress keeps commissioning/status logs; drop to _ERROR for even less.
+CONFIG_CHIP_LOG_DEFAULT_LEVEL_PROGRESS=y
+
+# ---- Power budget ----
+# This board is powered FROM the P1 port. On a DSMR 4.2 meter that rail is only
+# ~5 V @ 100 mA, and an always-on Thread router collapses it (POWERON boot-loop).
+# Cut peak + average draw so it fits the budget. Pair with bulk capacitance on the
+# rail (470-1000 uF) to survive the BLE/commissioning current burst.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_80=y          # 80 MHz instead of 160 (~20-30 mA less)
+CONFIG_ESP_PHY_MAX_TX_POWER=8                  # cap BLE + 802.15.4 PHY to +8 dBm (was +20)
+CONFIG_BT_LE_DFT_TX_POWER_LEVEL_P3=y           # BLE advertising +3 dBm (only needs to reach the phone)
+
+# ---- Thread Sleepy End Device (Matter ICD) ----
+# The big fix: a Thread ROUTER keeps its 802.15.4 receiver ON continuously
+# (~80-100 mA) -> that is what starves the P1 port. As a Minimal Thread Device +
+# Matter ICD Sleepy End Device, the receiver is OFF between polls, dropping average
+# current far enough to run off the port. This is a MAC-level change; it does NOT
+# require CPU light sleep.
+#
+# IMPORTANT: we deliberately do NOT enable CPU tickless/light sleep or
+# IEEE802154_SLEEP_ENABLE here. The P1 reader (p1_reader.cpp) listens on UART1
+# continuously; CPU light sleep would power down the UART and drop telegram bytes.
+# The CPU stays awake at 80 MHz (~20-30 mA); only the radio sleeps between polls.
+# (If that's still too much for a very weak meter, the next step is duty-cycling
+# the data-request line + deep sleep -- a p1_reader rework, done separately.)
+CONFIG_OPENTHREAD_MTD=y                        # Minimal Thread Device (was FTD/router)
+CONFIG_ENABLE_ICD_SERVER=y                     # Matter Intermittently Connected Device
+CONFIG_ICD_FAST_POLL_INTERVAL_MS=500           # active-mode poll (commissioning/commands)
+CONFIG_ICD_IDLE_MODE_INTERVAL_SEC=60
+CONFIG_ICD_ACTIVE_MODE_INTERVAL_MS=1000
+CONFIG_ICD_ACTIVE_MODE_THRESHOLD_MS=1000
+# SIT (Short Idle Time) ICD -- most compatible with HA + Apple; no LIT. Idle poll
+# stays at the 5 s default; reports are device-initiated so power updates still flow.
+CONFIG_BT_LE_SLEEP_ENABLE=y                    # let the BLE controller sleep too
+
+# ---- P1-Matter app config for the custom ESP32-C6 board ----
+# P1 data in (RX1) = GPIO20, data-request out (TX1) = GPIO21, single port (no passthrough)
+CONFIG_P1_UART_RX_GPIO=20
+CONFIG_P1_REQUEST_GPIO=21
+CONFIG_P1_PASSTHROUGH=n
+# The request line is driven through an INVERTING open-drain MOSFET (Q1B, gate=TX1):
+# GPIO21 HIGH -> Q1B on -> request pulled LOW (meter silent). Drive GPIO21 LOW so
+# Q1B is off and the request line is pulled HIGH (asserted) -> meter streams.
+CONFIG_P1_REQUEST_ACTIVE=n
+# RX data is already inverted once by Q1A, so the ESP UART sees correct polarity ->
+# leave CONFIG_P1_INVERT_RX off.
