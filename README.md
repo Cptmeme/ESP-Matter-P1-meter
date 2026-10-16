@@ -75,6 +75,56 @@ Parsed values are logged over the console (`p1_reader` tag) so you can confirm
 the meter is being read before/independent of Matter commissioning. Long-press
 the BOOT button to factory-reset (decommission) the device.
 
+## Updating the firmware
+
+### Versions
+
+Bump all three for every release, or the device ignores the update. The build
+fails if the two numbers differ.
+
+- `PROJECT_VER` (e.g. `"1.1"`) and `PROJECT_VER_NUMBER` (e.g. `2`) in `CMakeLists.txt`
+- `CONFIG_DEVICE_SOFTWARE_VERSION_NUMBER` in `sdkconfig` / `sdkconfig.defaults.esp32c6` (same number)
+
+### Over serial
+
+A normal `idf.py flash` still works and writes the bootloader, partition table
+and app.
+
+### Over the air (Matter OTA over Thread)
+
+The build also produces `build/P1-Matter-ota.bin`, a Matter OTA image. Apple
+Home and Google Home only update certified devices, so you serve it yourself
+with the Matter SDK's host tools. Build them from the SDK with
+`./scripts/build/build_examples.py --target darwin-arm64-chip-tool --target darwin-arm64-ota-provider build`.
+
+One-time setup: in your controller (e.g. Home Assistant), open a pairing window
+for the meter, then add the provider and the meter to `chip-tool`'s fabric:
+
+```
+chip-tool pairing code 2 <setup-code-from-controller>            # meter = node 2
+chip-ota-provider-app -f build/P1-Matter-ota.bin --discriminator 3841 --secured-device-port 5565 &
+chip-tool pairing onnetwork-long 1 20202021 3841                 # provider = node 1
+chip-tool accesscontrol write acl '[{"fabricIndex": 1, "privilege": 5, "authMode": 2, "subjects": [112233], "targets": null}, {"fabricIndex": 1, "privilege": 3, "authMode": 2, "subjects": null, "targets": [{"cluster": 41, "endpoint": null, "deviceType": null}]}]' 1 0
+```
+
+Each update (with the provider running and serving the new `P1-Matter-ota.bin`):
+
+```
+chip-tool otasoftwareupdaterequestor announce-otaprovider 1 0 2 0 2 0
+chip-tool basicinformation read software-version 2 0              # afterwards: the new number
+```
+
+The meter is a sleepy Thread end device, so the download is slower than on an
+always-listening Thread device; expect it to take well over ten minutes. The
+meter then restarts into the new version and keeps it once it has run for a
+minute while attached to the network. If it doesn't get there within 5
+minutes, or crashes before that, the bootloader automatically returns to the
+previous version.
+
+Rollback needs the bootloader from this build, and the bootloader can only be
+written over serial. A device that has only been updated over the air still
+updates fine, it just won't roll back.
+
 ## Source layout
 
 - `main/dsmr_parser.{h,cpp}` — OBIS/CRC16 telegram parser (no hardware deps).
